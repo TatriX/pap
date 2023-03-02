@@ -40,8 +40,8 @@ static struct prog
 decode(struct buffer asm_data) {
     struct prog result = {};
 
-    assert(asm_data.ndata >= 2);
     for (int i = 0; i < asm_data.ndata; i += 2) {
+        assert(i + 1 < asm_data.ndata);
         u8 first_byte = asm_data.data[i];
         u8 second_byte = asm_data.data[i + 1];
 
