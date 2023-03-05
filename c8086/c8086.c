@@ -129,6 +129,7 @@ decode(struct buffer asm_data) {
             dbg(mov);
             print_mov(mov);
 #endif
+            assert(result.nops < len(result.ops));
             result.ops[result.nops++] = mov;
         } break;
         case 0b1100: {
@@ -154,6 +155,7 @@ decode(struct buffer asm_data) {
             dbg(mov);
             print_mov(mov);
 #endif
+            assert(result.nops < len(result.ops));
             result.ops[result.nops++] = mov;
         } break;
         default:

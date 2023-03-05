@@ -3,6 +3,8 @@ typedef unsigned short u16;
 typedef signed char i8;
 typedef signed short i16;
 
+#define len(a) (sizeof(a)/sizeof(0[a]))
+
 #define DEBUG 0
 
 #if DEBUG
