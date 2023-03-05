@@ -39,7 +39,6 @@ usage(const char *progname) {
 static void
 print_mov_address(struct mov_op mov) {
     printf("[");
-    assert(mov.mod != 0b00 || mov.r_m != 110);
     switch (mov.r_m) {
     case 0b000: printf("bx + si"); break;
     case 0b001: printf("bx + di"); break;
@@ -47,13 +46,27 @@ print_mov_address(struct mov_op mov) {
     case 0b011: printf("bp + di"); break;
     case 0b100: printf("si"); break;
     case 0b101: printf("di"); break;
-    case 0b110: printf("bp"); break;
+    case 0b110: {
+        if (mov.mod == 0b00) {
+            printf("%d", mov.addr);
+        } else {
+            printf("bp");
+        }
+    } break;
     case 0b111: printf("bx"); break;
     default: unreachable();
     }
-    if (mov.mod != 0b00 && mov.disp != 0) {
-        printf(" + %d", mov.disp);
+
+    if ((mov.mod == 0b01) || (mov.mod == 0b10)) {
+        i16 disp = (mov.mod == 0b10) ? mov.disp : mov.disp_byte;
+        if (disp == 0) {
+        } else if (disp > 0) {
+            printf(" + %d",  disp);
+        } else {
+            printf(" - %d",  -disp);
+        }
     }
+
     printf("]");
 }
 
@@ -81,7 +94,16 @@ print_mov(struct mov_op mov) {
         printf("\n");
     } break;
     case op_MOV_IMM_TO_RM: {
-        unimplemented();
+        printf("mov ");
+        print_mov_address(mov);
+        printf(", %s %d", (mov.w) ? "word" : "byte", mov.data);
+        printf("\n");
+    } break;
+    case op_MOV_ACC_TO_MEM: {
+        printf("mov [%d], ax\n", mov.addr);
+    } break;
+    case op_MOV_MEM_TO_ACC: {
+        printf("mov ax, [%d]\n", mov.addr);
     } break;
     case op_MOV_IMM_TO_REG: {
         printf("mov %s, %d\n", reg_name(mov.reg, mov.w), (mov.w) ? mov.data : mov.data_byte);
@@ -89,21 +111,67 @@ print_mov(struct mov_op mov) {
     }
 }
 
+static void
+prog_add_mov_op(struct prog *prog, struct mov_op mov) {
+#if DEBUG
+    dbg(mov);
+    print_mov(mov);
+#endif
+    assert(prog->nops < len(prog->ops));
+    prog->ops[prog->nops++] = mov;
+}
+
+static u8
+decode_next(struct decoder *decoder) {
+    assert(decoder->byte != decoder->end);
+    u8 result = *decoder->byte++;
+    return result;
+}
+
+static void
+decode_disp(struct decoder *decoder, struct mov_op *mov) {
+    if (mov->mod == 0b00) {
+        if (mov->r_m == 0b110) {
+            u8 low = decode_next(decoder);
+            u8 high = decode_next(decoder);
+            mov->disp = (high << 8) | low;
+        }
+    } else if (mov->mod == 0b01) {
+        mov->disp = decode_next(decoder);
+    } else if (mov->mod == 0b10) {
+        u8 low = decode_next(decoder);
+        u8 high = decode_next(decoder);
+        mov->disp = (high << 8) | low;
+    }
+}
+
+static void
+decode_data(struct decoder *decoder, struct mov_op *mov) {
+    mov->data = decode_next(decoder);
+    if (mov->w) {
+        u8 high = decode_next(decoder);
+        mov->data |= (high << 8);
+    }
+}
+
 static struct prog
 decode(struct buffer asm_data) {
     struct prog result = {};
 
-    u8 *byte = asm_data.data;
-    u8 *end = asm_data.data + asm_data.ndata;
-    while (byte != end) {
-        u8 first_byte = *byte++;
-        assert(byte != end);
-        u8 second_byte = *byte++;
+    struct decoder decoder = {
+        .byte = asm_data.data,
+        .end = asm_data.data + asm_data.ndata,
+    };
+
+    while (decoder.byte != decoder.end) {
+        u8 first_byte = decode_next(&decoder);
 
         switch (first_byte >> 4) {
         case 0b1000: {
             // NOTE: Register/memory to/from register
             assert(((first_byte >> 2) & 0b11) == 0b10);
+
+            u8 second_byte = decode_next(&decoder);
             struct mov_op mov = {
                 .op = op_MOV_RM_TO_REG,
                 .d = (first_byte >> 1) & 1,
@@ -112,30 +180,23 @@ decode(struct buffer asm_data) {
                 .reg = (second_byte >> 3) & 0b111,
                 .r_m = second_byte & 0b111,
             };
-            if (mov.mod == 0b00) {
-                assert(mov.r_m != 0b110);
-            } else if (mov.mod == 0b01) {
-                assert(byte != end);
-                u8 third_byte = *byte++;
-                mov.disp = third_byte;
-            } else if (mov.mod == 0b10) {
-                assert(byte != end);
-                u8 third_byte = *byte++;
-                assert(byte != end);
-                u8 forth_byte = *byte++;
-                mov.disp = (forth_byte << 8) | third_byte;
-            }
-#if DEBUG
-            dbg(mov);
-            print_mov(mov);
-#endif
-            assert(result.nops < len(result.ops));
-            result.ops[result.nops++] = mov;
+            decode_disp(&decoder, &mov);
+            prog_add_mov_op(&result, mov);
         } break;
         case 0b1100: {
             // NOTE: Immediate to register/memory
             assert(((first_byte >> 1) & 0b111) == 0b011);
-            unimplemented();
+
+            u8 second_byte = decode_next(&decoder);
+            struct mov_op mov = {
+                .op = op_MOV_IMM_TO_RM,
+                .w = first_byte & 0b1,
+                .mod = (second_byte >> 6) & 0b11,
+                .r_m = second_byte & 0b111,
+            };
+            decode_disp(&decoder, &mov);
+            decode_data(&decoder, &mov);
+            prog_add_mov_op(&result, mov);
         } break;
         case 0b1011: {
             // NOTE: Immediate to register
@@ -143,19 +204,28 @@ decode(struct buffer asm_data) {
                 .op = op_MOV_IMM_TO_REG,
                 .w = first_byte & 0b1000,
                 .reg = first_byte & 0b111,
-                .data = second_byte,
             };
-            if (mov.w) {
-                assert(byte != end);
-                u8 third_byte = *byte++;
-                mov.data |= (third_byte << 8);
+            decode_data(&decoder, &mov);
+            prog_add_mov_op(&result, mov);
+        } break;
+        case 0b1010: {
+            // NOTE: Memory to accumulator
+            // NOTE: Accumulator to memory
+            struct mov_op mov = {
+                .w = first_byte & 0b1,
+                .reg = reg_AX,
+            };
+
+            switch ((first_byte & 0b1110)) {
+            case 0b0000: mov.op = op_MOV_MEM_TO_ACC; break;
+            case 0b0010: mov.op = op_MOV_ACC_TO_MEM; break;
+            default: unreachable();
             }
-#if DEBUG
-            dbg(mov);
-            print_mov(mov);
-#endif
-            assert(result.nops < len(result.ops));
-            result.ops[result.nops++] = mov;
+
+            u8 addr_low = decode_next(&decoder);
+            u8 addr_hi = decode_next(&decoder);
+            mov.addr = (addr_hi << 8) | addr_low;
+            prog_add_mov_op(&result, mov);
         } break;
         default:
             assert(!"Unsupported op");

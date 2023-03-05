@@ -7,7 +7,7 @@ typedef signed short i16;
 
 #define DEBUG 0
 
-#if DEBUG
+#if DEBUG == 2
 #define dbg(x) __builtin_dump_struct(&(x), fprintf, stderr)
 #define debugf(fmt, ...) fprintf(stderr, (fmt), __VA_ARGS__)
 #else
@@ -21,6 +21,11 @@ typedef signed short i16;
 struct buffer {
     u8 *data;
     int ndata;
+};
+
+struct decoder {
+    u8 *byte;
+    u8 *end;
 };
 
 enum reg {
@@ -40,6 +45,8 @@ enum op {
     op_MOV_RM_TO_REG,
     op_MOV_IMM_TO_RM,
     op_MOV_IMM_TO_REG,
+    op_MOV_MEM_TO_ACC,
+    op_MOV_ACC_TO_MEM,
 };
 
 struct mov_op {
@@ -52,6 +59,9 @@ struct mov_op {
     union {
         i8 disp_byte;
         i16 disp;
+        i16 addr;
+    };
+    union {
         i8 data_byte;
         i16 data;
     };
