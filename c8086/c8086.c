@@ -143,13 +143,12 @@ decode(struct buffer asm_data) {
                 .op = op_MOV_IMM_TO_REG,
                 .w = first_byte & 0b1000,
                 .reg = first_byte & 0b111,
+                .data = second_byte,
             };
             if (mov.w) {
                 assert(byte != end);
                 u8 third_byte = *byte++;
-                mov.data = (third_byte << 8) | second_byte;
-            } else {
-                mov.data = second_byte;
+                mov.data |= (third_byte << 8);
             }
 #if DEBUG
             dbg(mov);
