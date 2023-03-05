@@ -1,4 +1,7 @@
 typedef unsigned char u8;
+typedef unsigned short u16;
+typedef signed char i8;
+typedef signed short i16;
 
 #define DEBUG 0
 
@@ -9,6 +12,9 @@ typedef unsigned char u8;
 #define dbg(...)
 #define debugf(...)
 #endif
+
+#define unimplemented() assert(!"unimplemented")
+#define unreachable() assert(!"unreachable")
 
 struct buffer {
     u8 *data;
@@ -29,7 +35,9 @@ enum reg {
 };
 
 enum op {
-    op_MOV,
+    op_MOV_RM_TO_REG,
+    op_MOV_IMM_TO_RM,
+    op_MOV_IMM_TO_REG,
 };
 
 struct mov_op {
@@ -39,6 +47,12 @@ struct mov_op {
     u8 mod;
     enum reg reg;
     enum reg r_m;
+    union {
+        i8 disp_byte;
+        i16 disp;
+        i8 data_byte;
+        i16 data;
+    };
 };
 
 struct prog {
