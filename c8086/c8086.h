@@ -41,25 +41,63 @@ enum reg {
     reg_num,
 };
 
-enum op {
+enum op_type {
+    op_UNKNOWN,
+
     op_MOV_RM_TO_REG,
     op_MOV_IMM_TO_RM,
     op_MOV_IMM_TO_REG,
     op_MOV_MEM_TO_ACC,
     op_MOV_ACC_TO_MEM,
+
+    op_ADD,
+    op_ADD_IMM_TO_RM,
+    op_ADD_IMM_TO_ACC,
+
+    op_SUB,
+    op_SUB_IMM_TO_RM,
+    op_SUB_IMM_TO_ACC,
+
+    op_CMP,
+    op_CMP_IMM_TO_RM,
+    op_CMP_IMM_TO_ACC,
+
+    op_JE,
+    op_JL,
+    op_JLE,
+    op_JB,
+    op_JBE,
+    op_JP,
+    op_JO,
+    op_JS,
+    op_JNE,
+    op_JNL,
+    op_JG,
+    op_JNB,
+    op_JA,
+    op_JNP,
+    op_JNO,
+    op_JNS,
+    op_LOOP,
+    op_LOOPZ,
+    op_LOOPNZ,
+    op_JCXZ,
 };
 
-struct mov_op {
-    enum op op;
-    u8 d;
-    u8 w;
+struct op {
+    enum op_type type;
+    u8 d; // 0 - src in reg, 1 - dst in reg
+    u8 s; // sign extension
+    u8 w; // byte/word
     u8 mod;
+
     enum reg reg;
-    enum reg r_m;
+    enum reg rm;
     union {
         i8 disp_byte;
         i16 disp;
         i16 addr;
+        i8 ip_inc;
     };
     union {
         i8 data_byte;
@@ -68,7 +106,7 @@ struct mov_op {
 };
 
 struct prog {
-    struct mov_op ops[64];
+    struct op ops[128];
     int nops;
 };
 
