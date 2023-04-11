@@ -118,3 +118,9 @@ reg_name(enum reg reg, u8 word) {
     const char *result = (word ? word_names : byte_names)[reg];
     return result;
 }
+
+
+struct cpu {
+    bool powered;
+    enum reg regs[reg_num];
+};

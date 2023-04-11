@@ -3,10 +3,30 @@
 build:
 	clang -g -Wall -std=c2x -o c8086 c8086.c
 
-test: build
-	mkdir -p build
-	$(foreach file, $(wildcard ./translated/*), ./c8086 $(file) | yasm - -o build/$(basename $(notdir $(file))) && cmp -l build/$(basename $(notdir $(file))) $(file);)
 
+test: build test-all
+#test: build test-dev
+
+test-dev:
+	./c8086 ./translated/listing_0043_immediate_movs -exec
+
+test-all: test-decoding test-simulation
+
+
+
+decode = ./c8086 $(1) | yasm - -o build/$(basename $(notdir $(1))) && cmp -l build/$(basename $(notdir $(1))) $(1);
+
+test-decoding:
+	mkdir -p build
+	$(foreach file, $(wildcard ./translated/*), $(call decode, $(file)))
+
+
+
+simulate = ./c8086 $(1) -exec | diff -w -B -I "---" tests/$(notdir $(1)).txt -
+
+test-simulation:
+	$(call simulate, ./translated/listing_0043_immediate_movs)
+	$(call simulate, ./translated/listing_0044_register_movs)
 
 translate:
 	$(foreach file, $(wildcard listings/*.asm), yasm $(file) -o translated/$(basename $(notdir $(file)));)

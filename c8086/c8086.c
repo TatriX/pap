@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "c8086.h"
 
@@ -9,7 +10,10 @@ load_file(const char *path) {
     struct buffer result;
 
     FILE *file = fopen(path, "rb");
-    assert(file);
+    if (!file) {
+        fprintf(stderr, "Cannot load '%s'\n", path);
+        abort();
+    }
 
     fseek(file, 0, SEEK_END);
     result.ndata = ftell(file);
@@ -33,7 +37,7 @@ free_buffer(struct buffer *buffer) {
 
 static void
 usage(const char *progname) {
-    fprintf(stderr, "Usage: %s PATH\n", progname);
+    fprintf(stderr, "Usage: %s PATH [-exec]\n", progname);
 }
 
 static void
@@ -109,97 +113,78 @@ print_op(struct op op) {
     case op_MOV_RM_TO_REG: {
         printf("mov ");
         print_rm_to_reg(op);
-
-        printf("\n");
     } break;
     case op_MOV_IMM_TO_RM: {
         printf("mov ");
         print_op_address(op);
         printf(", %s %d", (op.w) ? "word" : "byte", op.data);
-        printf("\n");
     } break;
     case op_MOV_ACC_TO_MEM: {
-        printf("mov [%d], ax\n", op.addr);
+        printf("mov [%d], ax", op.addr);
     } break;
     case op_MOV_MEM_TO_ACC: {
-        printf("mov ax, [%d]\n", op.addr);
+        printf("mov ax, [%d]", op.addr);
     } break;
     case op_MOV_IMM_TO_REG: {
-        printf("mov %s, %d\n", reg_name(op.reg, op.w), (op.w) ? op.data : op.data_byte);
+        printf("mov %s, %d", reg_name(op.reg, op.w), (op.w) ? op.data : op.data_byte);
     } break;
     case op_ADD: {
         printf("add ");
         print_rm_to_reg(op);
-        printf("\n");
     } break;
     case op_ADD_IMM_TO_RM: {
         printf("add ");
         print_im_to_reg(op);
         printf(", %d", op.data);
-        printf("\n");
     } break;
     case op_ADD_IMM_TO_ACC: {
-        printf("add %s, %d\n", reg_name(0, op.w), op.data);
+        printf("add %s, %d", reg_name(0, op.w), op.data);
     } break;
     case op_SUB: {
         printf("sub ");
         print_rm_to_reg(op);
-        printf("\n");
     } break;
     case op_SUB_IMM_TO_RM: {
         printf("sub ");
         print_im_to_reg(op);
         printf(", %d", op.data);
-        printf("\n");
     } break;
     case op_SUB_IMM_TO_ACC: {
-        printf("sub %s, %d\n", reg_name(0, op.w), op.data);
+        printf("sub %s, %d", reg_name(0, op.w), op.data);
     } break;
     case op_CMP: {
         printf("cmp ");
         print_rm_to_reg(op);
-        printf("\n");
     } break;
     case op_CMP_IMM_TO_RM: {
         printf("cmp ");
         print_im_to_reg(op);
         printf(", %d", op.data);
-        printf("\n");
     } break;
     case op_CMP_IMM_TO_ACC: {
-        printf("cmp %s, %d\n", reg_name(0, op.w), op.data);
+        printf("cmp %s, %d", reg_name(0, op.w), op.data);
     } break;
-    case op_JE: printf("je $%+d\n", op.ip_inc); break;
-    case op_JL: printf("jl $%+d\n", op.ip_inc); break;
-    case op_JLE: printf("jle $%+d\n", op.ip_inc); break;
-    case op_JB: printf("jb $%+d\n", op.ip_inc); break;
-    case op_JBE: printf("jbe $%+d\n", op.ip_inc); break;
-    case op_JP: printf("jp $%+d\n", op.ip_inc); break;
-    case op_JO: printf("jo $%+d\n", op.ip_inc); break;
-    case op_JS: printf("js $%+d\n", op.ip_inc); break;
-    case op_JNE: printf("jne $%+d\n", op.ip_inc); break;
-    case op_JNL: printf("jnl $%+d\n", op.ip_inc); break;
-    case op_JG: printf("jg $%+d\n", op.ip_inc); break;
-    case op_JNB: printf("jnb $%+d\n", op.ip_inc); break;
-    case op_JA: printf("ja $%+d\n", op.ip_inc); break;
-    case op_JNP: printf("jnp $%+d\n", op.ip_inc); break;
-    case op_JNO: printf("jno $%+d\n", op.ip_inc); break;
-    case op_JNS: printf("jns $%+d\n", op.ip_inc); break;
-    case op_LOOP: printf("loop $%+d\n", op.ip_inc); break;
-    case op_LOOPZ: printf("loopz $%+d\n", op.ip_inc); break;
-    case op_LOOPNZ: printf("loopnz $%+d\n", op.ip_inc); break;
-    case op_JCXZ: printf("jcxz $%+d\n", op.ip_inc); break;
+    case op_JE: printf("je $%+d", op.ip_inc); break;
+    case op_JL: printf("jl $%+d", op.ip_inc); break;
+    case op_JLE: printf("jle $%+d", op.ip_inc); break;
+    case op_JB: printf("jb $%+d", op.ip_inc); break;
+    case op_JBE: printf("jbe $%+d", op.ip_inc); break;
+    case op_JP: printf("jp $%+d", op.ip_inc); break;
+    case op_JO: printf("jo $%+d", op.ip_inc); break;
+    case op_JS: printf("js $%+d", op.ip_inc); break;
+    case op_JNE: printf("jne $%+d", op.ip_inc); break;
+    case op_JNL: printf("jnl $%+d", op.ip_inc); break;
+    case op_JG: printf("jg $%+d", op.ip_inc); break;
+    case op_JNB: printf("jnb $%+d", op.ip_inc); break;
+    case op_JA: printf("ja $%+d", op.ip_inc); break;
+    case op_JNP: printf("jnp $%+d", op.ip_inc); break;
+    case op_JNO: printf("jno $%+d", op.ip_inc); break;
+    case op_JNS: printf("jns $%+d", op.ip_inc); break;
+    case op_LOOP: printf("loop $%+d", op.ip_inc); break;
+    case op_LOOPZ: printf("loopz $%+d", op.ip_inc); break;
+    case op_LOOPNZ: printf("loopnz $%+d", op.ip_inc); break;
+    case op_JCXZ: printf("jcxz $%+d", op.ip_inc); break;
     }
-}
-
-static void
-prog_add_op(struct prog *prog, struct op op) {
-#if DEBUG
-    dbg(op);
-#endif
-    print_op(op);
-    assert(prog->nops < len(prog->ops));
-    prog->ops[prog->nops++] = op;
 }
 
 static u8
@@ -243,8 +228,45 @@ decode_mod_reg_rm(struct decoder *decoder, struct op *op) {
     op->rm =  (second_byte >> 0) & 0b111;
 }
 
+static void
+cpu_exec(struct cpu *cpu, struct op op) {
+    printf(" ; ");
+    switch (op.type) {
+    case op_MOV_IMM_TO_REG: {
+        i16 old = cpu->regs[op.reg];
+        i16 new = cpu->regs[op.reg] = op.data;
+        printf("%s:0x%x->0x%x", reg_name(op.reg, op.w), old, new);
+    } break;
+    case op_MOV_RM_TO_REG: {
+        enum reg dst = (op.d) ? op.reg : op.rm;
+        enum reg src = (op.d) ? op.rm : op.reg;
+        i16 old = cpu->regs[dst];
+        i16 new = cpu->regs[dst] = cpu->regs[src];
+        printf("%s:0x%x->0x%x", reg_name(dst, op.w), old, new);
+    } break;
+    default:
+        printf("skipping %d", op.type);
+    }
+}
+
+static void
+cpu_add_and_exec(struct cpu *cpu, struct prog *prog, struct op op) {
+#if DEBUG
+    dbg(op);
+#endif
+    print_op(op);
+    if (cpu->powered) {
+        cpu_exec(cpu, op);
+    }
+    printf("\n");
+
+    assert(prog->nops < len(prog->ops));
+    prog->ops[prog->nops++] = op;
+}
+
+
 static struct prog
-decode(struct buffer asm_data) {
+cpu_decode(struct cpu *cpu, struct buffer asm_data) {
     struct prog result = {};
 
     struct decoder decoder = {
@@ -266,7 +288,7 @@ decode(struct buffer asm_data) {
             };
             decode_mod_reg_rm(&decoder, &op);
             decode_disp(&decoder, &op);
-            prog_add_op(&result, op);
+            cpu_add_and_exec(cpu, &result, op);
         } break;
         case 0b110001: {
             // NOTE: mov Immediate to register/memory
@@ -280,7 +302,7 @@ decode(struct buffer asm_data) {
             assert(op.reg == 0);
             decode_disp(&decoder, &op);
             decode_data(&decoder, &op);
-            prog_add_op(&result, op);
+            cpu_add_and_exec(cpu, &result, op);
         } break;
         case 0b101000: {
             // NOTE: mov Memory to accumulator
@@ -299,7 +321,7 @@ decode(struct buffer asm_data) {
             u8 addr_low = decode_next(&decoder);
             u8 addr_hi = decode_next(&decoder);
             op.addr = (addr_hi << 8) | addr_low;
-            prog_add_op(&result, op);
+            cpu_add_and_exec(cpu, &result, op);
         } break;
         case 0b000000: {
             // NOTE: add register/memory with register to either
@@ -310,7 +332,7 @@ decode(struct buffer asm_data) {
             };
             decode_mod_reg_rm(&decoder, &op);
             decode_disp(&decoder, &op);
-            prog_add_op(&result, op);
+            cpu_add_and_exec(cpu, &result, op);
         } break;
         case 0b100000: {
             struct op op = {
@@ -337,7 +359,7 @@ decode(struct buffer asm_data) {
 
             decode_disp(&decoder, &op);
             decode_data(&decoder, &op);
-            prog_add_op(&result, op);
+            cpu_add_and_exec(cpu, &result, op);
         } break;
         case 0b000001: {
             // NOTE: add immediate to accumulator
@@ -346,7 +368,7 @@ decode(struct buffer asm_data) {
                 .w = first_byte & 1,
             };
             decode_data(&decoder, &op);
-            prog_add_op(&result, op);
+            cpu_add_and_exec(cpu, &result, op);
         } break;
         case 0b001010: {
             // NOTE: sub register/memory with register to either
@@ -357,7 +379,7 @@ decode(struct buffer asm_data) {
             };
             decode_mod_reg_rm(&decoder, &op);
             decode_disp(&decoder, &op);
-            prog_add_op(&result, op);
+            cpu_add_and_exec(cpu, &result, op);
         } break;
         case 0b001011: {
             // NOTE: sub immediate to accumulator
@@ -366,7 +388,7 @@ decode(struct buffer asm_data) {
                 .w = first_byte & 1,
             };
             decode_data(&decoder, &op);
-            prog_add_op(&result, op);
+            cpu_add_and_exec(cpu, &result, op);
         } break;
 
         case 0b001110: {
@@ -378,7 +400,7 @@ decode(struct buffer asm_data) {
             };
             decode_mod_reg_rm(&decoder, &op);
             decode_disp(&decoder, &op);
-            prog_add_op(&result, op);
+            cpu_add_and_exec(cpu, &result, op);
         } break;
         case 0b001111: {
             // NOTE: cmp immediate with accumulator
@@ -387,7 +409,7 @@ decode(struct buffer asm_data) {
                 .w = first_byte & 1,
             };
             decode_data(&decoder, &op);
-            prog_add_op(&result, op);
+            cpu_add_and_exec(cpu, &result, op);
         } break;
         default: {
             enum op_type jumps[255] = {
@@ -417,7 +439,7 @@ decode(struct buffer asm_data) {
                     .type = jumps[first_byte],
                     .ip_inc = decode_next(&decoder) + 2, // NOTE: add op offset
                 };
-                prog_add_op(&result, op);
+                cpu_add_and_exec(cpu, &result, op);
             } else if ((first_byte >> 4) == 0b1011) {
                 // NOTE: mov Immediate to register
                 struct op op = {
@@ -426,7 +448,7 @@ decode(struct buffer asm_data) {
                     .reg = first_byte & 0b111,
                 };
                 decode_data(&decoder, &op);
-                prog_add_op(&result, op);
+                cpu_add_and_exec(cpu, &result, op);
                 break;
             } else {
                 assert(!"Unsupported op");
@@ -438,30 +460,61 @@ decode(struct buffer asm_data) {
     return result;
 }
 
+static void
+cpu_print_regs(struct cpu *cpu) {
+    printf("Final registers:\n");
+    enum reg order[reg_num] = {
+        reg_AX,
+        reg_BX,
+        reg_CX,
+        reg_DX,
+        reg_SP,
+        reg_BP,
+        reg_SI,
+        reg_DI,
+    };
+    for (int i = 0; i < reg_num; i++) {
+        enum reg reg = order[i];
+        i16 value = cpu->regs[reg];
+        printf("\t%s: 0x%04x (%d)\n", reg_name(reg, 1), value, value);
+    }
+}
+
 int
 main(int argc, char *argv[]) {
-    if (argc != 2) {
+    if (argc < 2) {
         usage(argv[0]);
         exit(0);
+    }
+
+    struct cpu cpu = {};
+    if (argc > 2) {
+        if (strcmp(argv[2], "-exec")) {
+            usage(argv[0]);
+            exit(0);
+        }
+
+        cpu.powered = true;
     }
 
     const char *bin_path = argv[1];
     struct buffer asm_data = load_file(bin_path);
     dbg(asm_data);
 
-    printf("; %s\n", bin_path);
-    printf("\n");
-    printf("bits 16\n");
-#if 1
-    decode(asm_data);
-#else
-    struct prog prog = decode(asm_data);
-    for (int i = 0; i < prog.nops; i++) {
-        print_op(prog.ops[i]);
+    if (cpu.powered) {
+        printf("--- %s execution ---\n", bin_path);
+    } else {
+        printf("; %s\n", bin_path);
+        printf("\n");
+        printf("bits 16\n");
     }
-#endif
 
+    cpu_decode(&cpu, asm_data);
     printf("\n");
+
+    if (cpu.powered) {
+        cpu_print_regs(&cpu);
+    }
 
     free_buffer(&asm_data);
 }
