@@ -229,20 +229,88 @@ decode_mod_reg_rm(struct decoder *decoder, struct op *op) {
 }
 
 static void
+flags_print(enum flags flags) {
+    if (flags & flags_SIGN) printf("S");
+    if (flags & flags_PARITY) printf("P");
+    if (flags & flags_ZERO) printf("Z");
+}
+
+static void
 cpu_exec(struct cpu *cpu, struct op op) {
     printf(" ; ");
     switch (op.type) {
     case op_MOV_IMM_TO_REG: {
-        i16 old = cpu->regs[op.reg];
-        i16 new = cpu->regs[op.reg] = op.data;
+        u16 old = cpu->regs[op.reg];
+        u16 new = cpu->regs[op.reg] = op.data;
         printf("%s:0x%x->0x%x", reg_name(op.reg, op.w), old, new);
     } break;
     case op_MOV_RM_TO_REG: {
         enum reg dst = (op.d) ? op.reg : op.rm;
         enum reg src = (op.d) ? op.rm : op.reg;
-        i16 old = cpu->regs[dst];
-        i16 new = cpu->regs[dst] = cpu->regs[src];
+        u16 old = cpu->regs[dst];
+        u16 new = cpu->regs[dst] = cpu->regs[src];
         printf("%s:0x%x->0x%x", reg_name(dst, op.w), old, new);
+    } break;
+    case op_ADD: {
+        enum reg dst = (op.d) ? op.reg : op.rm;
+        enum reg src = (op.d) ? op.rm : op.reg;
+        u16 old = cpu->regs[dst];
+        u16 new = old + cpu->regs[src];
+        cpu->regs[op.reg] = new;
+        printf("%s:0x%x->0x%x", reg_name(dst, op.w), old, new);
+    } break;
+    case op_ADD_IMM_TO_RM: {
+        u16 old = cpu->regs[op.rm];
+        u16 new = cpu->regs[op.rm] + op.data;
+        cpu->regs[op.rm] = new;
+        printf("%s:0x%x->0x%x", reg_name(op.rm, op.w), old, new);
+    } break;
+    case op_SUB: {
+        enum reg dst = (op.d) ? op.reg : op.rm;
+        enum reg src = (op.d) ? op.rm : op.reg;
+        u16 old = cpu->regs[dst];
+        u16 new = old - cpu->regs[src];
+        cpu->regs[dst] = new;
+        enum flags old_flags = cpu->flags;
+        if ((i16)new < 0) {
+            cpu->flags |= flags_SIGN;
+        }
+        printf("%s:0x%x->0x%x flags:", reg_name(dst, op.w), old, new);
+        flags_print(old_flags);
+        printf("->");
+        flags_print(cpu->flags);
+    } break;
+    case op_SUB_IMM_TO_RM: {
+        u16 old = cpu->regs[op.rm];
+        u16 new = old - op.data;
+        cpu->regs[op.rm] = new;
+        enum flags old_flags = cpu->flags;
+        if ((i16)new < 0) {
+            cpu->flags |= flags_SIGN;
+        }
+        if (new == 0) {
+            cpu->flags |= flags_ZERO;
+            cpu->flags |= flags_PARITY;
+        }
+        printf("%s:0x%x->0x%x flags:", reg_name(op.rm, op.w), old, new);
+        flags_print(old_flags);
+        printf("->");
+        flags_print(cpu->flags);
+    } break;
+    case op_CMP: {
+        enum reg dst = (op.d) ? op.reg : op.rm;
+        enum reg src = (op.d) ? op.rm : op.reg;
+        i16 diff = cpu->regs[dst] - cpu->regs[src];
+        enum flags old_flags = cpu->flags;
+        cpu->flags &= ~flags_SIGN;
+        if (diff == 0) {
+            cpu->flags |= flags_ZERO;
+            cpu->flags |= flags_PARITY;
+        }
+        printf("flags:");
+        flags_print(old_flags);
+        printf("->");
+        flags_print(cpu->flags);
     } break;
     default:
         printf("skipping %d", op.type);
@@ -475,8 +543,15 @@ cpu_print_regs(struct cpu *cpu) {
     };
     for (int i = 0; i < reg_num; i++) {
         enum reg reg = order[i];
-        i16 value = cpu->regs[reg];
-        printf("\t%s: 0x%04x (%d)\n", reg_name(reg, 1), value, value);
+        u16 value = cpu->regs[reg];
+        if (value) {
+            printf("\t%s: 0x%04x (%d)\n", reg_name(reg, 1), value, value);
+        }
+    }
+    if (cpu->flags) {
+        printf("\tflags: ");
+        flags_print(cpu->flags);
+        printf("\n");
     }
 }
 

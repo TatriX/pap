@@ -2,6 +2,7 @@ typedef unsigned char u8;
 typedef unsigned short u16;
 typedef signed char i8;
 typedef signed short i16;
+typedef unsigned short u16;
 
 #define len(a) (sizeof(a)/sizeof(0[a]))
 
@@ -100,8 +101,8 @@ struct op {
         i8 ip_inc;
     };
     union {
-        i8 data_byte;
-        i16 data;
+        u8 data_byte;
+        u16 data;
     };
 };
 
@@ -120,7 +121,14 @@ reg_name(enum reg reg, u8 word) {
 }
 
 
+enum flags {
+    flags_ZERO = 0x1,
+    flags_PARITY = 0x2,
+    flags_SIGN = 0x4,
+};
+
 struct cpu {
     bool powered;
     enum reg regs[reg_num];
+    enum flags flags;
 };
