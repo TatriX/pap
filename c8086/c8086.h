@@ -115,12 +115,6 @@ reg_name(enum reg reg, u8 word) {
     return result;
 }
 
-
-struct decoder {
-    u8 *byte;
-    u8 *end;
-};
-
 enum flags {
     flags_CARRY = 0x1,
     flags_PARITY = 0x2,
@@ -135,10 +129,10 @@ struct cpu {
     enum reg regs[reg_num];
     enum flags flags;
 
+    u16 last_ip; // NOTE: just for printing
     u16 ip;
-
     u8 *memory;
-    struct decoder *decoder;
+    u16 nbytes; // NOTE: number of bytes actually read into memory
 
     bool print_ip;
 };

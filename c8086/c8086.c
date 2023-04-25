@@ -188,41 +188,41 @@ print_op(struct op op) {
 }
 
 static u8
-decode_next(struct decoder *decoder) {
-    assert(decoder->byte != decoder->end);
-    u8 result = *decoder->byte++;
+cpu_read_next_byte(struct cpu *cpu) {
+    assert(cpu->ip < cpu->nbytes);
+    u8 result = cpu->memory[cpu->ip++];
     return result;
 }
 
 static void
-decode_disp(struct decoder *decoder, struct op *op) {
+cpu_read_disp(struct cpu *cpu, struct op *op) {
     if (op->mod == 0b00) {
         if (op->rm == 0b110) {
-            u8 low = decode_next(decoder);
-            u8 high = decode_next(decoder);
+            u8 low = cpu_read_next_byte(cpu);
+            u8 high = cpu_read_next_byte(cpu);
             op->disp = (high << 8) | low;
         }
     } else if (op->mod == 0b01) {
-        op->disp = decode_next(decoder);
+        op->disp = cpu_read_next_byte(cpu);
     } else if (op->mod == 0b10) {
-        u8 low = decode_next(decoder);
-        u8 high = decode_next(decoder);
+        u8 low = cpu_read_next_byte(cpu);
+        u8 high = cpu_read_next_byte(cpu);
         op->disp = (high << 8) | low;
     }
 }
 
 static void
-decode_data(struct decoder *decoder, struct op *op) {
-    op->data = decode_next(decoder);
+cpu_read_data(struct cpu *cpu, struct op *op) {
+    op->data = cpu_read_next_byte(cpu);
     if (!op->s && op->w) {
-        u8 high = decode_next(decoder);
+        u8 high = cpu_read_next_byte(cpu);
         op->data |= (high << 8);
     }
 }
 
 static void
-decode_mod_reg_rm(struct decoder *decoder, struct op *op) {
-    u8 second_byte = decode_next(decoder);
+cpu_read_mod_reg_rm(struct cpu *cpu, struct op *op) {
+    u8 second_byte = cpu_read_next_byte(cpu);
     op->mod = (second_byte >> 6) & 0b11;
     op->reg = (second_byte >> 3) & 0b111;
     op->rm =  (second_byte >> 0) & 0b111;
@@ -240,10 +240,9 @@ flags_print(enum flags flags) {
 
 static void
 cpu_advance_ip(struct cpu *cpu) {
-    u16 old_ip = cpu->ip;
-    cpu->ip = cpu->decoder->byte - cpu->memory;
     if (cpu->print_ip) {
-        printf(" ip:0x%x->0x%x", old_ip, cpu->ip);
+        printf(" ip:0x%x->0x%x", cpu->last_ip, cpu->ip);
+        cpu->last_ip = cpu->ip;
     }
 }
 
@@ -366,19 +365,14 @@ cpu_add_and_exec(struct cpu *cpu, struct prog *prog, struct op op) {
 
 
 static struct prog
-cpu_decode(struct cpu *cpu, struct buffer asm_data) {
+cpu_run(struct cpu *cpu, struct buffer asm_data) {
     struct prog result = {};
 
-    struct decoder decoder = {
-        .byte = asm_data.data,
-        .end = asm_data.data + asm_data.ndata,
-    };
-
     cpu->memory = asm_data.data;
-    cpu->decoder = &decoder;
+    cpu->nbytes = asm_data.ndata;
 
-    while (decoder.byte != decoder.end) {
-        u8 first_byte = decode_next(&decoder);
+    while (cpu->ip < cpu->nbytes) {
+        u8 first_byte = cpu_read_next_byte(cpu);
         u8 opcode = first_byte >> 2;
         switch (opcode) {
         case 0b100010: {
@@ -388,8 +382,8 @@ cpu_decode(struct cpu *cpu, struct buffer asm_data) {
                 .d = (first_byte >> 1) & 1,
                 .w = first_byte & 1,
             };
-            decode_mod_reg_rm(&decoder, &op);
-            decode_disp(&decoder, &op);
+            cpu_read_mod_reg_rm(cpu, &op);
+            cpu_read_disp(cpu, &op);
             cpu_add_and_exec(cpu, &result, op);
         } break;
         case 0b110001: {
@@ -400,10 +394,10 @@ cpu_decode(struct cpu *cpu, struct buffer asm_data) {
                 .type = op_MOV_IMM_TO_RM,
                 .w = first_byte & 1,
             };
-            decode_mod_reg_rm(&decoder, &op);
+            cpu_read_mod_reg_rm(cpu, &op);
             assert(op.reg == 0);
-            decode_disp(&decoder, &op);
-            decode_data(&decoder, &op);
+            cpu_read_disp(cpu, &op);
+            cpu_read_data(cpu, &op);
             cpu_add_and_exec(cpu, &result, op);
         } break;
         case 0b101000: {
@@ -420,8 +414,8 @@ cpu_decode(struct cpu *cpu, struct buffer asm_data) {
             default: unreachable();
             }
 
-            u8 addr_low = decode_next(&decoder);
-            u8 addr_hi = decode_next(&decoder);
+            u8 addr_low = cpu_read_next_byte(cpu);
+            u8 addr_hi = cpu_read_next_byte(cpu);
             op.addr = (addr_hi << 8) | addr_low;
             cpu_add_and_exec(cpu, &result, op);
         } break;
@@ -432,8 +426,8 @@ cpu_decode(struct cpu *cpu, struct buffer asm_data) {
                 .d = (first_byte >> 1) & 1,
                 .w = first_byte & 1,
             };
-            decode_mod_reg_rm(&decoder, &op);
-            decode_disp(&decoder, &op);
+            cpu_read_mod_reg_rm(cpu, &op);
+            cpu_read_disp(cpu, &op);
             cpu_add_and_exec(cpu, &result, op);
         } break;
         case 0b100000: {
@@ -441,7 +435,7 @@ cpu_decode(struct cpu *cpu, struct buffer asm_data) {
                 .s = (first_byte >> 1) & 1,
                 .w = first_byte & 1,
             };
-            decode_mod_reg_rm(&decoder, &op);
+            cpu_read_mod_reg_rm(cpu, &op);
             switch (op.reg) {
             case 0b000:
                 // NOTE: add immediate to register/memory
@@ -459,8 +453,8 @@ cpu_decode(struct cpu *cpu, struct buffer asm_data) {
                 unimplemented();
             }
 
-            decode_disp(&decoder, &op);
-            decode_data(&decoder, &op);
+            cpu_read_disp(cpu, &op);
+            cpu_read_data(cpu, &op);
             cpu_add_and_exec(cpu, &result, op);
         } break;
         case 0b000001: {
@@ -469,7 +463,7 @@ cpu_decode(struct cpu *cpu, struct buffer asm_data) {
                 .type = op_ADD_IMM_TO_ACC,
                 .w = first_byte & 1,
             };
-            decode_data(&decoder, &op);
+            cpu_read_data(cpu, &op);
             cpu_add_and_exec(cpu, &result, op);
         } break;
         case 0b001010: {
@@ -479,8 +473,8 @@ cpu_decode(struct cpu *cpu, struct buffer asm_data) {
                 .d = (first_byte >> 1) & 1,
                 .w = first_byte & 1,
             };
-            decode_mod_reg_rm(&decoder, &op);
-            decode_disp(&decoder, &op);
+            cpu_read_mod_reg_rm(cpu, &op);
+            cpu_read_disp(cpu, &op);
             cpu_add_and_exec(cpu, &result, op);
         } break;
         case 0b001011: {
@@ -489,7 +483,7 @@ cpu_decode(struct cpu *cpu, struct buffer asm_data) {
                 .type = op_SUB_IMM_TO_ACC,
                 .w = first_byte & 1,
             };
-            decode_data(&decoder, &op);
+            cpu_read_data(cpu, &op);
             cpu_add_and_exec(cpu, &result, op);
         } break;
 
@@ -500,8 +494,8 @@ cpu_decode(struct cpu *cpu, struct buffer asm_data) {
                 .d = (first_byte >> 1) & 1,
                 .w = first_byte & 1,
             };
-            decode_mod_reg_rm(&decoder, &op);
-            decode_disp(&decoder, &op);
+            cpu_read_mod_reg_rm(cpu, &op);
+            cpu_read_disp(cpu, &op);
             cpu_add_and_exec(cpu, &result, op);
         } break;
         case 0b001111: {
@@ -510,7 +504,7 @@ cpu_decode(struct cpu *cpu, struct buffer asm_data) {
                 .type = op_CMP_IMM_TO_ACC,
                 .w = first_byte & 1,
             };
-            decode_data(&decoder, &op);
+            cpu_read_data(cpu, &op);
             cpu_add_and_exec(cpu, &result, op);
         } break;
         default: {
@@ -539,7 +533,7 @@ cpu_decode(struct cpu *cpu, struct buffer asm_data) {
             if (jumps[first_byte]) {
                 struct op op = {
                     .type = jumps[first_byte],
-                    .ip_inc = decode_next(&decoder) + 2, // NOTE: add op offset
+                    .ip_inc = cpu_read_next_byte(cpu) + 2, // NOTE: add op offset
                 };
                 cpu_add_and_exec(cpu, &result, op);
             } else if ((first_byte >> 4) == 0b1011) {
@@ -549,7 +543,7 @@ cpu_decode(struct cpu *cpu, struct buffer asm_data) {
                     .w = first_byte & 0b1000,
                     .reg = first_byte & 0b111,
                 };
-                decode_data(&decoder, &op);
+                cpu_read_data(cpu, &op);
                 cpu_add_and_exec(cpu, &result, op);
                 break;
             } else {
@@ -625,7 +619,7 @@ main(int argc, char *argv[]) {
         printf("bits 16\n");
     }
 
-    cpu_decode(&cpu, asm_data);
+    cpu_run(&cpu, asm_data);
     printf("\n");
 
     if (cpu.powered) {
