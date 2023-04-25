@@ -66,7 +66,7 @@ enum op_type {
     op_JP,
     op_JO,
     op_JS,
-    op_JNE,
+    op_JNE, // jnz
     op_JNL,
     op_JG,
     op_JNB,
@@ -129,7 +129,7 @@ struct cpu {
     enum reg regs[reg_num];
     enum flags flags;
 
-    u16 last_ip; // NOTE: just for printing
+    u16 last_ip; // NOTE: beginning of current instruction
     u16 ip;
     u8 *memory;
     u16 nbytes; // NOTE: number of bytes actually read into memory

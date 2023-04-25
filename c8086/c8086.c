@@ -242,8 +242,8 @@ static void
 cpu_advance_ip(struct cpu *cpu) {
     if (cpu->print_ip) {
         printf(" ip:0x%x->0x%x", cpu->last_ip, cpu->ip);
-        cpu->last_ip = cpu->ip;
     }
+    cpu->last_ip = cpu->ip;
 }
 
 static void
@@ -332,6 +332,11 @@ cpu_exec(struct cpu *cpu, struct op op) {
         if (diff == 0) {
             cpu->flags |= flags_ZERO;
             cpu->flags |= flags_PARITY;
+        }
+    } break;
+    case op_JNE: {
+        if (!(cpu->flags & flags_ZERO)) {
+            cpu->ip = cpu->last_ip + op.ip_inc;
         }
     } break;
     default:
