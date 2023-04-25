@@ -40,6 +40,35 @@ usage(const char *progname) {
     fprintf(stderr, "Usage: %s PATH [-exec]\n", progname);
 }
 
+static u16
+cpu_op_effective_address(struct cpu *cpu, struct op op) {
+    u16 address = 0;
+    switch (op.rm) {
+    case 0b000: address = cpu->regs[reg_BX] + cpu->regs[reg_SI]; break;
+    case 0b001: address = cpu->regs[reg_BX] + cpu->regs[reg_DI]; break;
+    case 0b010: address = cpu->regs[reg_BP] + cpu->regs[reg_SI]; break;
+    case 0b011: address = cpu->regs[reg_BP] + cpu->regs[reg_DI]; break;
+    case 0b100: address = cpu->regs[reg_SI]; break;
+    case 0b101: address = cpu->regs[reg_DI]; break;
+    case 0b110: {
+        if (op.mod == 0b00) {
+            address = op.addr;
+        } else {
+            address = cpu->regs[reg_BP];
+        }
+    } break;
+    case 0b111: address = cpu->regs[reg_BX]; break;
+    default: unreachable();
+    }
+
+    if ((op.mod == 0b01) || (op.mod == 0b10)) {
+        i16 disp = (op.mod == 0b10) ? op.disp : op.disp_byte;
+        address += disp;
+    }
+
+    return address;
+}
+
 static void
 print_op_address(struct op op) {
     printf("[");
@@ -52,7 +81,7 @@ print_op_address(struct op op) {
     case 0b101: printf("di"); break;
     case 0b110: {
         if (op.mod == 0b00) {
-            printf("%d", op.addr);
+            printf("%+d", op.addr);
         } else {
             printf("bp");
         }
@@ -65,9 +94,9 @@ print_op_address(struct op op) {
         i16 disp = (op.mod == 0b10) ? op.disp : op.disp_byte;
         if (disp == 0) {
         } else if (disp > 0) {
-            printf(" + %d",  disp);
+            printf("+%d",  disp);
         } else {
-            printf(" - %d",  -disp);
+            printf("-%d",  -disp);
         }
     }
 
@@ -116,8 +145,9 @@ print_op(struct op op) {
     } break;
     case op_MOV_IMM_TO_RM: {
         printf("mov ");
+        printf("%s", (op.w) ? "word " : "byte ");
         print_op_address(op);
-        printf(", %s %d", (op.w) ? "word" : "byte", op.data);
+        printf(", %d", op.data);
     } break;
     case op_MOV_ACC_TO_MEM: {
         printf("mov [%d], ax", op.addr);
@@ -190,7 +220,7 @@ print_op(struct op op) {
 static u8
 cpu_read_next_byte(struct cpu *cpu) {
     assert(cpu->ip < cpu->nbytes);
-    u8 result = cpu->memory[cpu->ip++];
+    u8 result = cpu->instructions[cpu->ip++];
     return result;
 }
 
@@ -253,17 +283,29 @@ cpu_exec(struct cpu *cpu, struct op op) {
     enum flags old_flags = cpu->flags;
 
     switch (op.type) {
+    case op_MOV_IMM_TO_RM: {
+        u16 address = cpu_op_effective_address(cpu, op);
+        cpu->memory[address] = op.data;
+    } break;
     case op_MOV_IMM_TO_REG: {
         u16 old = cpu->regs[op.reg];
         u16 new = cpu->regs[op.reg] = op.data;
         printf("%s:0x%x->0x%x", reg_name(op.reg, op.w), old, new);
     } break;
     case op_MOV_RM_TO_REG: {
-        enum reg dst = (op.d) ? op.reg : op.rm;
-        enum reg src = (op.d) ? op.rm : op.reg;
-        u16 old = cpu->regs[dst];
-        u16 new = cpu->regs[dst] = cpu->regs[src];
-        printf("%s:0x%x->0x%x", reg_name(dst, op.w), old, new);
+        if (op.mod == 0b11) {
+            enum reg dst = (op.d) ? op.reg : op.rm;
+            enum reg src = (op.d) ? op.rm : op.reg;
+            u16 old = cpu->regs[dst];
+            u16 new = cpu->regs[dst] = cpu->regs[src];
+            printf("%s:0x%x->0x%x", reg_name(dst, op.w), old, new);
+        } else {
+            u16 address = cpu_op_effective_address(cpu, op);
+            u16 old = cpu->regs[op.reg];
+            u16 new = cpu->memory[address];
+            cpu->regs[op.reg] = new;
+            printf("%s:0x%x->0x%x", reg_name(op.reg, op.w), old, new);
+        }
     } break;
     case op_ADD: {
         enum reg dst = (op.d) ? op.reg : op.rm;
@@ -283,6 +325,17 @@ cpu_exec(struct cpu *cpu, struct op op) {
         } else {
             cpu->flags &= ~flags_AUX_CARRY;
         }
+        int parity = 0;
+        for (int i = 0; i < 8; i++) {
+            if ((new >> i) & 0x1) {
+                parity++;
+            }
+        }
+        if (parity & 0x1) {
+            cpu->flags &= ~flags_PARITY;
+        } else {
+            cpu->flags |= flags_PARITY;
+        }
         printf("%s:0x%x->0x%x", reg_name(op.rm, op.w), old, new);
     } break;
     case op_SUB: {
@@ -301,7 +354,7 @@ cpu_exec(struct cpu *cpu, struct op op) {
         } else {
             cpu->flags &= ~flags_CARRY;
         }
-        bool aux_carry = ((old & 0xf) + (op.data & 0xf)) > 0xf;
+        bool aux_carry = (sub & 0xf) > (old & 0xf);
         if (aux_carry) {
             cpu->flags |= flags_AUX_CARRY;
         } else {
@@ -312,13 +365,31 @@ cpu_exec(struct cpu *cpu, struct op op) {
     } break;
     case op_SUB_IMM_TO_RM: {
         u16 old = cpu->regs[op.rm];
-        u16 new = old - op.data;
+        u16 sub = op.data;
+        u16 new = old - sub;
         cpu->regs[op.rm] = new;
         if ((i16)new < 0) {
             cpu->flags |= flags_SIGN;
         }
         if (new == 0) {
             cpu->flags |= flags_ZERO;
+            cpu->flags |= flags_PARITY;
+        }
+        bool aux_carry = (sub & 0xf) > (old & 0xf);
+        if (aux_carry) {
+            cpu->flags |= flags_AUX_CARRY;
+        } else {
+            cpu->flags &= ~flags_AUX_CARRY;
+        }
+        int parity = 0;
+        for (int i = 0; i < 8; i++) {
+            if ((new >> i) & 0x1) {
+                parity++;
+            }
+        }
+        if (parity & 0x1) {
+            cpu->flags &= ~flags_PARITY;
+        } else {
             cpu->flags |= flags_PARITY;
         }
         printf("%s:0x%x->0x%x", reg_name(op.rm, op.w), old, new);
@@ -373,7 +444,7 @@ static struct prog
 cpu_run(struct cpu *cpu, struct buffer asm_data) {
     struct prog result = {};
 
-    cpu->memory = asm_data.data;
+    cpu->instructions = asm_data.data;
     cpu->nbytes = asm_data.ndata;
 
     while (cpu->ip < cpu->nbytes) {

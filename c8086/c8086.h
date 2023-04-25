@@ -129,9 +129,11 @@ struct cpu {
     enum reg regs[reg_num];
     enum flags flags;
 
+    u8 memory[1024*1024];
+
     u16 last_ip; // NOTE: beginning of current instruction
     u16 ip;
-    u8 *memory;
+    u8 *instructions;
     u16 nbytes; // NOTE: number of bytes actually read into memory
 
     bool print_ip;
