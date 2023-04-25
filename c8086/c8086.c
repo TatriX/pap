@@ -230,14 +230,29 @@ decode_mod_reg_rm(struct decoder *decoder, struct op *op) {
 
 static void
 flags_print(enum flags flags) {
-    if (flags & flags_SIGN) printf("S");
+    if (flags & flags_CARRY) printf("C");
     if (flags & flags_PARITY) printf("P");
+    if (flags & flags_AUX_CARRY) printf("A");
     if (flags & flags_ZERO) printf("Z");
+    if (flags & flags_SIGN) printf("S");
+    if (flags & flags_OVERFLOW) printf("O");
+}
+
+static void
+cpu_advance_ip(struct cpu *cpu) {
+    u16 old_ip = cpu->ip;
+    cpu->ip = cpu->decoder->byte - cpu->memory;
+    if (cpu->print_ip) {
+        printf(" ip:0x%x->0x%x", old_ip, cpu->ip);
+    }
 }
 
 static void
 cpu_exec(struct cpu *cpu, struct op op) {
     printf(" ; ");
+
+    enum flags old_flags = cpu->flags;
+
     switch (op.type) {
     case op_MOV_IMM_TO_REG: {
         u16 old = cpu->regs[op.reg];
@@ -263,28 +278,43 @@ cpu_exec(struct cpu *cpu, struct op op) {
         u16 old = cpu->regs[op.rm];
         u16 new = cpu->regs[op.rm] + op.data;
         cpu->regs[op.rm] = new;
+        bool aux_carry = ((old & 0xf) + (op.data & 0xf)) > 0xf;
+        if (aux_carry) {
+            cpu->flags |= flags_AUX_CARRY;
+        } else {
+            cpu->flags &= ~flags_AUX_CARRY;
+        }
         printf("%s:0x%x->0x%x", reg_name(op.rm, op.w), old, new);
     } break;
     case op_SUB: {
         enum reg dst = (op.d) ? op.reg : op.rm;
         enum reg src = (op.d) ? op.rm : op.reg;
         u16 old = cpu->regs[dst];
-        u16 new = old - cpu->regs[src];
+        u16 sub = cpu->regs[src];
+        u16 new = old - sub;
         cpu->regs[dst] = new;
-        enum flags old_flags = cpu->flags;
         if ((i16)new < 0) {
             cpu->flags |= flags_SIGN;
         }
-        printf("%s:0x%x->0x%x flags:", reg_name(dst, op.w), old, new);
-        flags_print(old_flags);
-        printf("->");
-        flags_print(cpu->flags);
+        bool carry = (old & 0xff) < (sub & 0xff);
+        if (carry) {
+            cpu->flags |= flags_CARRY;
+        } else {
+            cpu->flags &= ~flags_CARRY;
+        }
+        bool aux_carry = ((old & 0xf) + (op.data & 0xf)) > 0xf;
+        if (aux_carry) {
+            cpu->flags |= flags_AUX_CARRY;
+        } else {
+            cpu->flags &= ~flags_AUX_CARRY;
+        }
+        printf("%s:0x%x->0x%x", reg_name(dst, op.w), old, new);
+
     } break;
     case op_SUB_IMM_TO_RM: {
         u16 old = cpu->regs[op.rm];
         u16 new = old - op.data;
         cpu->regs[op.rm] = new;
-        enum flags old_flags = cpu->flags;
         if ((i16)new < 0) {
             cpu->flags |= flags_SIGN;
         }
@@ -292,28 +322,30 @@ cpu_exec(struct cpu *cpu, struct op op) {
             cpu->flags |= flags_ZERO;
             cpu->flags |= flags_PARITY;
         }
-        printf("%s:0x%x->0x%x flags:", reg_name(op.rm, op.w), old, new);
-        flags_print(old_flags);
-        printf("->");
-        flags_print(cpu->flags);
+        printf("%s:0x%x->0x%x", reg_name(op.rm, op.w), old, new);
     } break;
     case op_CMP: {
         enum reg dst = (op.d) ? op.reg : op.rm;
         enum reg src = (op.d) ? op.rm : op.reg;
         i16 diff = cpu->regs[dst] - cpu->regs[src];
-        enum flags old_flags = cpu->flags;
+
         cpu->flags &= ~flags_SIGN;
         if (diff == 0) {
             cpu->flags |= flags_ZERO;
             cpu->flags |= flags_PARITY;
         }
-        printf("flags:");
-        flags_print(old_flags);
-        printf("->");
-        flags_print(cpu->flags);
     } break;
     default:
         printf("skipping %d", op.type);
+    }
+
+    cpu_advance_ip(cpu);
+
+    if (old_flags != cpu->flags) {
+        printf(" flags:");
+        flags_print(old_flags);
+        printf("->");
+        flags_print(cpu->flags);
     }
 }
 
@@ -342,9 +374,11 @@ cpu_decode(struct cpu *cpu, struct buffer asm_data) {
         .end = asm_data.data + asm_data.ndata,
     };
 
+    cpu->memory = asm_data.data;
+    cpu->decoder = &decoder;
+
     while (decoder.byte != decoder.end) {
         u8 first_byte = decode_next(&decoder);
-
         u8 opcode = first_byte >> 2;
         switch (opcode) {
         case 0b100010: {
@@ -548,6 +582,9 @@ cpu_print_regs(struct cpu *cpu) {
             printf("\t%s: 0x%04x (%d)\n", reg_name(reg, 1), value, value);
         }
     }
+    if (cpu->print_ip) {
+        printf("\tip: 0x%04x (%d)\n", cpu->ip, cpu->ip);
+    }
     if (cpu->flags) {
         printf("\tflags: ");
         flags_print(cpu->flags);
@@ -570,6 +607,10 @@ main(int argc, char *argv[]) {
         }
 
         cpu.powered = true;
+
+        if (argc > 3 && strcmp(argv[3], "-print-ip") == 0) {
+            cpu.print_ip = true;
+        }
     }
 
     const char *bin_path = argv[1];

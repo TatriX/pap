@@ -24,11 +24,6 @@ struct buffer {
     int ndata;
 };
 
-struct decoder {
-    u8 *byte;
-    u8 *end;
-};
-
 enum reg {
     reg_AX,
     reg_CX,
@@ -121,14 +116,29 @@ reg_name(enum reg reg, u8 word) {
 }
 
 
+struct decoder {
+    u8 *byte;
+    u8 *end;
+};
+
 enum flags {
-    flags_ZERO = 0x1,
+    flags_CARRY = 0x1,
     flags_PARITY = 0x2,
-    flags_SIGN = 0x4,
+    flags_AUX_CARRY = 0x4,
+    flags_ZERO = 0x8,
+    flags_SIGN = 0x10,
+    flags_OVERFLOW = 0x20,
 };
 
 struct cpu {
     bool powered;
     enum reg regs[reg_num];
     enum flags flags;
+
+    u16 ip;
+
+    u8 *memory;
+    struct decoder *decoder;
+
+    bool print_ip;
 };

@@ -10,7 +10,7 @@ test: build test-all
 test-all: test-decoding test-simulation
 
 test-dev:
-	./c8086 ./translated/listing_0046_add_sub_cmp -exec
+	./c8086 ./translated/listing_0048_ip_register -exec
 
 
 
@@ -22,12 +22,13 @@ test-decoding:
 
 
 
-simulate = ./c8086 $(1) -exec | diff -w -B -I "---" tests/$(notdir $(1)).txt -
+simulate = ./c8086 $(1) -exec $(2) | diff -w -B -I "---" tests/$(notdir $(1)).txt -
 
 test-simulation:
 	$(call simulate, ./translated/listing_0043_immediate_movs)
 	$(call simulate, ./translated/listing_0044_register_movs)
 	$(call simulate, ./translated/listing_0046_add_sub_cmp)
+	$(call simulate, ./translated/listing_0048_ip_register, "-print-ip")
 
 translate:
 	$(foreach file, $(wildcard listings/*.asm), yasm $(file) -o translated/$(basename $(notdir $(file)));)
