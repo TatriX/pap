@@ -5,7 +5,9 @@
 #include <stdlib.h>
 #include <time.h>
 
-#define len(a) (sizeof(a)/sizeof(0[a]))
+#include "../basic.h"
+#include "../perf/perf.h"
+
 #define sqr(a) ((a) * (a))
 #define pi 3.14159265358979323846f
 
@@ -14,8 +16,6 @@
 #else
 #define debugf(...)
 #endif
-
-typedef float f32;
 
 static inline f32
 radians(f32 degrees) {
@@ -46,9 +46,11 @@ main() {
     f32 sum = 0;
     f32 earth_radius_km = 6371.0f;
 
-    clock_t start_time = clock();
+    u64 cpu_freq = estimate_cpu_freq(0);
 
-    const int npoints = 10'000'000;
+    u64 start_cycles = rdtsc();
+
+    const int npoints = 10000000;
     f32 *points = malloc(npoints * 4 * sizeof(f32));
     assert(points);
 
@@ -85,7 +87,7 @@ main() {
     }
     assert(count == npoints);
 
-    clock_t mid_time = clock();
+    u64 mid_cycles = rdtsc();
 
     for (int i = 0; i < npoints; i++) {
         f32 x0 = points[4*i + 0];
@@ -95,15 +97,15 @@ main() {
         sum += haversine_distance(x0, y0, x1, y1, earth_radius_km);
     }
 
-    clock_t end_time = clock();
+    u64 end_cycles = rdtsc();
 
     fclose(infile);
 
     f32 avg = sum / count;
-    double time_spent = (double)(end_time - start_time)/CLOCKS_PER_SEC;
+    f64 time_spent = (f64)(end_cycles - start_cycles)/cpu_freq;
     printf("Avg of %d records: %f\n", count, avg);
-    printf("Input = %.2f seconds\n", (double)(mid_time - start_time)/CLOCKS_PER_SEC);
-    printf("Math = %.2f seconds\n", (double)(end_time - mid_time)/CLOCKS_PER_SEC);
+    printf("Input = %.2f seconds\n", (f64)(mid_cycles - start_cycles)/cpu_freq);
+    printf("Math = %.2f seconds\n", (f64)(end_cycles - mid_cycles)/cpu_freq);
     printf("Total = %.2f seconds\n", time_spent);
     printf("Throughput = %.f haversines/second\n", count/time_spent);
 }
