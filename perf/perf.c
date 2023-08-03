@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <stdio.h>
 #include <time.h>
 #include <stdint.h>
@@ -5,28 +6,42 @@
 
 typedef uint64_t u64;
 typedef double f64;
-typedef f64 t64;
 
-static t64
+u64 Nanoseconds = 1000000000;
+u64 Milliseconds = 1000000;
+
+// nanoseconds
+static u64
 now(void) {
     struct timespec tp;
     clock_gettime(CLOCK_MONOTONIC, &tp);
-    return tp.tv_sec + tp.tv_nsec * 1e-9;
+    return tp.tv_sec * Nanoseconds + tp.tv_nsec;
+}
+
+static f64
+estimate_cpu_freq(u64 time_to_wait) {
+    u64 start_cycles = _rdtsc();
+    for (u64 started = now(); now() - started < time_to_wait; ) {
+        // busy wait
+    }
+    u64 end_cycles = _rdtsc();
+    u64 elapsed_cycles = end_cycles - start_cycles;
+    f64 result = ((f64)elapsed_cycles / (f64)time_to_wait);
+    return result;
 }
 
 
 int main(int argc, char *argv[]) {
-    printf("Start: %f:\n", now());
+    u64 time_to_wait = 100 * Milliseconds;
 
-    u64 start_cycles = _rdtsc();
-    for (t64 started = now(); now() - started < 1.0; ) {
-       // busy wait
+    if (argc > 1) {
+        time_to_wait = atol(argv[1]) * Milliseconds;
     }
-    u64 end_cycles = _rdtsc();
+    printf("Waiting for %ldms\n", time_to_wait / Milliseconds);
 
-    u64 elapsed_cycles = end_cycles - start_cycles;
-    printf("Cycles elapsed: %ld\n", elapsed_cycles);
-    printf("Freq: %fGhz\n", (elapsed_cycles / 1e9));
+    f64 cpu_freq = estimate_cpu_freq(time_to_wait);
+
+    printf("Freq: %fGhz\n", cpu_freq);
 
     return 0;
 }
