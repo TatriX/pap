@@ -4,14 +4,13 @@
 #include <locale.h>
 #include <time.h>
 
-
-// TODO: figure out how to pass it?
-[[maybe_unused]]
 static void
-mat_set(float ***mat, const int N, float value) {
-    for (int i = 0; i < N; ++i)
-        for (int j = 0; j < N; ++j)
-            *mat[i][j] = value;
+mat_set(const int N, float mat[][N], float value) {
+    for (int i = 0; i < N; ++i) {
+        for (int j = 0; j < N; ++j) {
+            mat[i][j] = value;
+        }
+    }
 }
 
 #define N 1000
@@ -30,13 +29,8 @@ int main(int argc, char *argv[]) {
 
     // NOTE naive matrix multiplication
 
-    for (int i = 0; i < N; ++i) {
-        for (int j = 0; j < N; ++j) {
-            mul1[i][j] = 42;
-            mul2[i][j] = 13;
-            res[i][j] = 0;
-        }
-    }
+    mat_set(N, mul1, 42);
+    mat_set(N, mul2, 13);
 
     struct timespec started, ended;
     clock_gettime(CLOCK_MONOTONIC, &started);
