@@ -37,7 +37,11 @@ haversine_distance(f32 x0, f32 y0, f32 x1, f32 y1, f32 radius) {
 
 int
 main() {
+    begin_profile();
+
+    begin_profile_block("Read File");
     const char *inpath = "data.json";
+
     printf("Reading from %s\n", inpath);
     FILE *infile = fopen(inpath, "r");
     assert(infile);
@@ -45,10 +49,6 @@ main() {
     int count = 0;
     f32 sum = 0;
     f32 earth_radius_km = 6371.0f;
-
-    u64 cpu_freq = estimate_cpu_freq(0);
-
-    u64 start_cycles = rdtsc();
 
     const int npoints = 10000000;
     f32 *points = malloc(npoints * 4 * sizeof(f32));
@@ -86,9 +86,11 @@ main() {
         assert(count++ < npoints);
     }
     assert(count == npoints);
+    fclose(infile);
 
-    u64 mid_cycles = rdtsc();
+    end_profile_block();
 
+    begin_profile_block("Haversines");
     for (int i = 0; i < npoints; i++) {
         f32 x0 = points[4*i + 0];
         f32 y0 = points[4*i + 1];
@@ -96,16 +98,10 @@ main() {
         f32 y1 = points[4*i + 3];
         sum += haversine_distance(x0, y0, x1, y1, earth_radius_km);
     }
-
-    u64 end_cycles = rdtsc();
-
-    fclose(infile);
+    end_profile_block();
 
     f32 avg = sum / count;
-    f64 time_spent = (f64)(end_cycles - start_cycles)/cpu_freq;
     printf("Avg of %d records: %f\n", count, avg);
-    printf("Input = %.2f seconds\n", (f64)(mid_cycles - start_cycles)/cpu_freq);
-    printf("Math = %.2f seconds\n", (f64)(end_cycles - mid_cycles)/cpu_freq);
-    printf("Total = %.2f seconds\n", time_spent);
-    printf("Throughput = %.f haversines/second\n", count/time_spent);
+
+    end_and_print_profile();
 }
