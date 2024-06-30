@@ -3,6 +3,10 @@
 #include <time.h>
 #include <x86intrin.h>
 
+#ifndef assert
+#include <assert.h>
+#endif
+
 #include "../basic.h"
 
 const u64 Seconds = 1000000000;
@@ -16,14 +20,14 @@ rdtsc(void) {
 }
 
 // nanoseconds
-u64
+static inline u64
 now(void) {
     struct timespec tp;
     clock_gettime(CLOCK_MONOTONIC, &tp);
     return tp.tv_sec * Seconds + tp.tv_nsec;
 }
 
-u64
+static inline u64
 estimate_cpu_freq(u64 ns_to_wait) {
     if (ns_to_wait == 0) {
         ns_to_wait = 100 * Milliseconds;
@@ -50,23 +54,23 @@ struct _profile_block {
     u16 nblocks;
 } _profile;
 
-static void
+static inline void
 begin_profile(void) {
     _profile.start_cycles = rdtsc();
 }
 
-static void
+static inline void
 begin_profile_block(const char *label) {
     _profile.blocks[_profile.nblocks].begin_cycles = rdtsc();
     _profile.blocks[_profile.nblocks].label = label;
 }
 
-static void
+static inline void
 end_profile_block(void) {
     _profile.blocks[_profile.nblocks++].end_cycles = rdtsc();
 }
 
-static void
+static inline void
 end_and_print_profile(void) {
     assert(_profile.nblocks < len(_profile.blocks));
     u64 end_cycles = rdtsc();
@@ -75,7 +79,7 @@ end_and_print_profile(void) {
 
     u64 total_cycles = (end_cycles - _profile.start_cycles);
     f64 time_spent = (f64)total_cycles/cpu_freq;
-    printf("Total Time: %.2fs (Est. CPU Freq: %.2fGz)\n", time_spent, cpu_freq/1e9);
+    printf("Cycles: %ld; Time: %.2fs (Est. CPU Freq: %.2fGz)\n", total_cycles, time_spent, cpu_freq/1e9);
 
     for (int i = 0; i < _profile.nblocks; i++) {
         struct _profile_block *block = _profile.blocks + i;
